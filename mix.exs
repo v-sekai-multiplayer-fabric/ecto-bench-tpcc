@@ -33,12 +33,16 @@ defmodule EctoBenchTpcc.MixProject do
       {:ecto_sql, "~> 3.11"},
       {:benchee, "~> 1.3"},
 
-      # Dev/test only: SQLite is the reference adapter this repo's own CI
-      # exercises the harness against, since it needs no external server --
-      # the whole point of splitting this out of ecto-fdb-relational is
-      # that the harness/schema/workload are adapter-generic; SQLite is
-      # just the cheapest real adapter to prove that in CI.
-      {:ecto_sqlite3, "~> 0.17", only: :test},
+      # Dev/test only: `ecto_fdb_relational` (an Ecto adapter for
+      # FoundationDB Record Layer's Relational Layer) is the reference
+      # adapter this repo's own CI exercises the harness against -- this
+      # repo was split out of that project specifically to prove the
+      # harness/schema/workload are adapter-generic, so testing against
+      # the adapter it was split from is the point. Not on Hex yet, so
+      # pulled straight from GitHub. Requires a live FoundationDB cluster
+      # + `fdb-relational-server` to actually run against -- see
+      # `test/tpcc_test.exs` and `.github/workflows/ci.yml`.
+      {:ecto_fdb_relational, github: "weftspun/ecto-fdb-relational", only: :test},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]
   end
