@@ -9,17 +9,24 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        elixir: ["1.20"]
-        otp: ["29"]
+    timeout-minutes: 15
+    env:
+      FDB_VERSION: "7.1.26"
+      FRS_VERSION: "4.3.6.0"
+      FDB_CLUSTER_FILE: /etc/foundationdb/fdb.cluster
+      FRL_TEST_PORT: "8123"
     steps:
       - uses: actions/checkout@v4
 
       - uses: erlef/setup-beam@v1
         with:
-          elixir-version: ${{ matrix.elixir }}
-          otp-version: ${{ matrix.otp }}
+          elixir-version: "1.20"
+          otp-version: "29"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
 
       - name: Restore deps cache
         uses: actions/cache@v4
@@ -27,10 +34,47 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-mix-1.20-29-${{ hashFiles('mix.lock') }}
 
       - run: mix deps.get
       - run: mix format --check-formatted
       - run: mix compile --warnings-as-errors
-      - name: Run the TPC-C workload against real SQLite (no external services needed)
+
+      - name: Install FoundationDB ${{ env.FDB_VERSION }} (single-node, auto-configured)
+        run: |
+          curl -fsSL -o /tmp/fdb-clients.deb \
+            "https://github.com/apple/foundationdb/releases/download/${FDB_VERSION}/foundationdb-clients_${FDB_VERSION}-1_amd64.deb"
+          curl -fsSL -o /tmp/fdb-server.deb \
+            "https://github.com/apple/foundationdb/releases/download/${FDB_VERSION}/foundationdb-server_${FDB_VERSION}-1_amd64.deb"
+          sudo dpkg -i /tmp/fdb-clients.deb /tmp/fdb-server.deb
+          for i in $(seq 1 30); do
+            fdbcli --exec 'status minimal' | grep -q 'The database is available' && break
+            sleep 2
+          done
+          fdbcli --exec status
+
+      - name: Download fdb-relational-server ${{ env.FRS_VERSION }}
+        run: |
+          curl -fsSL -o /tmp/fdb-relational-server.jar \
+            "https://repo1.maven.org/maven2/org/foundationdb/fdb-relational-server/${FRS_VERSION}/fdb-relational-server-${FRS_VERSION}-all.jar"
+
+      - name: Start fdb-relational-server
+        run: |
+          nohup java -cp /tmp/fdb-relational-server.jar \
+            com.apple.foundationdb.relational.server.RelationalServer -g 8123 -p 8124 \
+            > /tmp/relational-server.log 2>&1 &
+          for i in $(seq 1 30); do
+            (exec 3<>/dev/tcp/127.0.0.1/8123) 2>/dev/null && exec 3<&- && break
+            sleep 2
+          done
+
+      - name: Run the TPC-C workload against real FoundationDB + fdb-relational-server
         run: mix test --trace
+
+      - name: Upload fdb-relational-server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fdb-relational-server-log
+          path: /tmp/relational-server.log
+          if-no-files-found: ignore
