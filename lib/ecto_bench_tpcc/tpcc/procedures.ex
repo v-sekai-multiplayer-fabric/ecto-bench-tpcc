@@ -23,16 +23,18 @@ defmodule EctoBenchTpcc.Tpcc.Procedures do
   protect you, and that gap is the adapter's, not something this module
   can paper over.
 
-  **Concurrent writers can make a transaction fail for reasons that have
-  nothing to do with the data** -- e.g. SQLite (this repo's own reference
-  adapter, see `test/tpcc_test.exs`) can raise `database is locked` /
-  `database busy` when two connections race to become the writer, even
-  with a busy-timeout configured, because that's a lock-upgrade conflict
-  rather than a plain wait-your-turn lock. The real TPC-C spec expects
-  exactly this: a transaction that aborts for contention reasons is meant
-  to be retried by the driver, not treated as a workload failure. `retry/1`
-  below does that (bounded, so a genuine bug still surfaces as an error
-  instead of retrying forever).
+  **Concurrent writers can still make a transaction fail for reasons that
+  have nothing to do with the data** -- e.g. SQLite (this repo's own
+  reference adapter, see `test/tpcc_test.exs`) can raise `database is
+  locked` / `database busy` when two connections race to become the
+  writer. This module does not retry that: `Repo.insert!`/`get!`/
+  `update_all`/`transaction` all raise on a driver-level failure with no
+  tagged-tuple alternative at that layer, so a retry loop here would need
+  a `rescue` as its only way to observe the failure at all -- deliberately
+  left out. A contention failure surfaces as a crash of the calling
+  workload run, same as any other exception; see `test/tpcc_test.exs` for
+  how the reference test configures the SQLite connection pool to keep
+  that survivable rather than guaranteed-impossible.
 
   **`stock_level/2` needs `COUNT(DISTINCT s_i_id) ... WHERE s_quantity <
   ?`, which not every `Ecto` adapter's query builder supports** (no
@@ -70,58 +72,56 @@ defmodule EctoBenchTpcc.Tpcc.Procedures do
     now = System.system_time(:millisecond)
 
     {:ok, :ok} =
-      retry(fn ->
-        repo.transaction(fn ->
-          district = repo.get_by!(District, d_id: d_id, d_w_id: w_id)
-          o_id = district.d_next_o_id
+      repo.transaction(fn ->
+        district = repo.get_by!(District, d_id: d_id, d_w_id: w_id)
+        o_id = district.d_next_o_id
 
-          from(d in District, where: d.d_id == ^d_id and d.d_w_id == ^w_id)
-          |> repo.update_all(set: [d_next_o_id: o_id + 1])
+        from(d in District, where: d.d_id == ^d_id and d.d_w_id == ^w_id)
+        |> repo.update_all(set: [d_next_o_id: o_id + 1])
 
-          repo.insert!(%Oorder{
-            o_id: o_id,
-            o_d_id: d_id,
-            o_w_id: w_id,
-            o_c_id: c_id,
-            o_entry_d: now,
-            o_carrier_id: nil,
-            o_ol_cnt: ol_cnt,
-            o_all_local: 1
+        repo.insert!(%Oorder{
+          o_id: o_id,
+          o_d_id: d_id,
+          o_w_id: w_id,
+          o_c_id: c_id,
+          o_entry_d: now,
+          o_carrier_id: nil,
+          o_ol_cnt: ol_cnt,
+          o_all_local: 1
+        })
+
+        repo.insert!(%NewOrder{no_o_id: o_id, no_d_id: d_id, no_w_id: w_id})
+
+        for ol_number <- 1..ol_cnt do
+          i_id = random(1, Loader.items())
+          item = repo.get!(Item, i_id)
+          quantity = random(1, 10)
+
+          stock = repo.get_by!(Stock, s_i_id: i_id, s_w_id: w_id)
+
+          new_quantity =
+            if stock.s_quantity > quantity,
+              do: stock.s_quantity - quantity,
+              else: stock.s_quantity + 91
+
+          from(s in Stock, where: s.s_i_id == ^i_id and s.s_w_id == ^w_id)
+          |> repo.update_all(set: [s_quantity: new_quantity, s_ytd: stock.s_ytd + quantity])
+
+          repo.insert!(%OrderLine{
+            ol_o_id: o_id,
+            ol_d_id: d_id,
+            ol_w_id: w_id,
+            ol_number: ol_number,
+            ol_i_id: i_id,
+            ol_supply_w_id: w_id,
+            ol_delivery_d: nil,
+            ol_quantity: quantity,
+            ol_amount: quantity * item.i_price,
+            ol_dist_info: stock.s_dist_info
           })
+        end
 
-          repo.insert!(%NewOrder{no_o_id: o_id, no_d_id: d_id, no_w_id: w_id})
-
-          for ol_number <- 1..ol_cnt do
-            i_id = random(1, Loader.items())
-            item = repo.get!(Item, i_id)
-            quantity = random(1, 10)
-
-            stock = repo.get_by!(Stock, s_i_id: i_id, s_w_id: w_id)
-
-            new_quantity =
-              if stock.s_quantity > quantity,
-                do: stock.s_quantity - quantity,
-                else: stock.s_quantity + 91
-
-            from(s in Stock, where: s.s_i_id == ^i_id and s.s_w_id == ^w_id)
-            |> repo.update_all(set: [s_quantity: new_quantity, s_ytd: stock.s_ytd + quantity])
-
-            repo.insert!(%OrderLine{
-              ol_o_id: o_id,
-              ol_d_id: d_id,
-              ol_w_id: w_id,
-              ol_number: ol_number,
-              ol_i_id: i_id,
-              ol_supply_w_id: w_id,
-              ol_delivery_d: nil,
-              ol_quantity: quantity,
-              ol_amount: quantity * item.i_price,
-              ol_dist_info: stock.s_dist_info
-            })
-          end
-
-          :ok
-        end)
+        :ok
       end)
 
     :ok
@@ -136,46 +136,44 @@ defmodule EctoBenchTpcc.Tpcc.Procedures do
     now = NaiveDateTime.utc_now()
 
     {:ok, :ok} =
-      retry(fn ->
-        repo.transaction(fn ->
-          warehouse = repo.get!(Warehouse, w_id)
+      repo.transaction(fn ->
+        warehouse = repo.get!(Warehouse, w_id)
 
-          from(w in Warehouse, where: w.w_id == ^w_id)
-          |> repo.update_all(set: [w_ytd: warehouse.w_ytd + amount])
+        from(w in Warehouse, where: w.w_id == ^w_id)
+        |> repo.update_all(set: [w_ytd: warehouse.w_ytd + amount])
 
-          district = repo.get_by!(District, d_id: d_id, d_w_id: w_id)
+        district = repo.get_by!(District, d_id: d_id, d_w_id: w_id)
 
-          from(d in District, where: d.d_id == ^d_id and d.d_w_id == ^w_id)
-          |> repo.update_all(set: [d_ytd: district.d_ytd + amount])
+        from(d in District, where: d.d_id == ^d_id and d.d_w_id == ^w_id)
+        |> repo.update_all(set: [d_ytd: district.d_ytd + amount])
 
-          customer = repo.get_by!(Customer, c_id: c_id, c_d_id: d_id, c_w_id: w_id)
+        customer = repo.get_by!(Customer, c_id: c_id, c_d_id: d_id, c_w_id: w_id)
 
-          from(c in Customer, where: c.c_id == ^c_id and c.c_d_id == ^d_id and c.c_w_id == ^w_id)
-          |> repo.update_all(
-            set: [
-              c_balance: customer.c_balance - amount,
-              c_ytd_payment: customer.c_ytd_payment + amount
-            ]
-          )
+        from(c in Customer, where: c.c_id == ^c_id and c.c_d_id == ^d_id and c.c_w_id == ^w_id)
+        |> repo.update_all(
+          set: [
+            c_balance: customer.c_balance - amount,
+            c_ytd_payment: customer.c_ytd_payment + amount
+          ]
+        )
 
-          repo.insert!(%History{
-            # h_id is HISTORY's real primary key (a UUID surrogate -- see
-            # EctoBenchTpcc.Tpcc.Migration's moduledoc for why h_date, real
-            # civil time, isn't unique enough to serve as one under real
-            # concurrency).
-            h_id: Ecto.UUID.generate(),
-            h_c_id: c_id,
-            h_c_d_id: d_id,
-            h_c_w_id: w_id,
-            h_d_id: d_id,
-            h_w_id: w_id,
-            h_date: now,
-            h_amount: amount,
-            h_data: "payment"
-          })
+        repo.insert!(%History{
+          # h_id is HISTORY's real primary key (a UUID surrogate -- see
+          # EctoBenchTpcc.Tpcc.Migration's moduledoc for why h_date, real
+          # civil time, isn't unique enough to serve as one under real
+          # concurrency).
+          h_id: Ecto.UUID.generate(),
+          h_c_id: c_id,
+          h_c_d_id: d_id,
+          h_c_w_id: w_id,
+          h_d_id: d_id,
+          h_w_id: w_id,
+          h_date: now,
+          h_amount: amount,
+          h_data: "payment"
+        })
 
-          :ok
-        end)
+        :ok
       end)
 
     :ok
@@ -221,25 +219,21 @@ defmodule EctoBenchTpcc.Tpcc.Procedures do
 
       %{no_o_id: o_id} ->
         {:ok, :ok} =
-          retry(fn ->
-            repo.transaction(fn ->
-              from(no in NewOrder,
-                where: no.no_o_id == ^o_id and no.no_d_id == ^d_id and no.no_w_id == ^w_id
-              )
-              |> repo.delete_all()
+          repo.transaction(fn ->
+            from(no in NewOrder,
+              where: no.no_o_id == ^o_id and no.no_d_id == ^d_id and no.no_w_id == ^w_id
+            )
+            |> repo.delete_all()
 
-              from(o in Oorder,
-                where: o.o_id == ^o_id and o.o_d_id == ^d_id and o.o_w_id == ^w_id
-              )
-              |> repo.update_all(set: [o_carrier_id: random(1, 10)])
+            from(o in Oorder, where: o.o_id == ^o_id and o.o_d_id == ^d_id and o.o_w_id == ^w_id)
+            |> repo.update_all(set: [o_carrier_id: random(1, 10)])
 
-              from(ol in OrderLine,
-                where: ol.ol_o_id == ^o_id and ol.ol_d_id == ^d_id and ol.ol_w_id == ^w_id
-              )
-              |> repo.update_all(set: [ol_delivery_d: now])
+            from(ol in OrderLine,
+              where: ol.ol_o_id == ^o_id and ol.ol_d_id == ^d_id and ol.ol_w_id == ^w_id
+            )
+            |> repo.update_all(set: [ol_delivery_d: now])
 
-              :ok
-            end)
+            :ok
           end)
 
         :ok
@@ -273,41 +267,4 @@ defmodule EctoBenchTpcc.Tpcc.Procedures do
   end
 
   defp random(min, max), do: :rand.uniform(max - min + 1) + min - 1
-
-  # Retries `fun` (a 0-arity `repo.transaction/1` call) when it fails for a
-  # contention reason (lock/busy conflicts between concurrent writers) --
-  # see the moduledoc. Ecto/`ecto_sql` raise on a driver-level SQL error by
-  # design (there's no tagged-tuple form to pattern-match on instead), so
-  # a `rescue` at the boundary is unavoidable -- but it's confined to
-  # `attempt/1` alone, which converts the outcome to a plain tagged tuple
-  # immediately. `retry/2`'s own loop is then ordinary `case`-based control
-  # flow, not a chain of rescues deciding whether to recurse.
-  @max_retries 10
-  @never_retry [Ecto.NoResultsError, Ecto.ConstraintError, Ecto.QueryError, ArgumentError]
-
-  defp retry(fun, attempts_left \\ @max_retries)
-
-  defp retry(fun, attempts_left) when attempts_left > 0 do
-    case attempt(fun) do
-      {:ok, result} -> result
-      {:retry, _exception} -> retry(fun, attempts_left - 1)
-    end
-  end
-
-  defp retry(fun, 0) do
-    {:ok, result} = attempt(fun)
-    result
-  end
-
-  defp attempt(fun) do
-    {:ok, fun.()}
-  rescue
-    e in @never_retry -> reraise e, __STACKTRACE__
-    e -> if contention_error?(e), do: {:retry, e}, else: reraise(e, __STACKTRACE__)
-  end
-
-  defp contention_error?(exception) do
-    message = Exception.message(exception)
-    String.contains?(message, "locked") or String.contains?(message, "busy")
-  end
 end
