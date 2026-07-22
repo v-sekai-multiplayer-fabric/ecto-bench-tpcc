@@ -21,9 +21,21 @@ defmodule EctoBenchTpcc.TpccTest do
   setup_all do
     File.rm("tpcc_test.db")
 
+    # pool_size: 1 would force every worker onto the same single
+    # connection, serializing whole Repo.transaction/2 blocks end-to-end
+    # and defeating the point of the worker_count: 2 scaling run below --
+    # pool_size: 2 lets both workers hold their own connection and race
+    # at the SQLite file-lock level instead, which is what "scaling"
+    # here is actually meant to measure.
+    # busy_timeout: without it, a second connection hitting the SQLite
+    # file lock while the first is mid-transaction gets an immediate
+    # SQLITE_BUSY error instead of waiting -- exactly the failure mode
+    # pool_size: 2 opens up now that both workers can hold a connection
+    # at once.
     Application.put_env(:ecto_bench_tpcc, Repo,
       database: "tpcc_test.db",
-      pool_size: 1
+      pool_size: 2,
+      busy_timeout: 5_000
     )
 
     {:ok, _pid} = Repo.start_link()
