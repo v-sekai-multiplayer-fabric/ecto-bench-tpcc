@@ -50,9 +50,23 @@ defmodule EctoBenchTpcc.TpccTest do
   # harness. A real regression (2-worker meaningfully *slower*) still
   # gets flagged.
   test "mixed TPC-C workload demonstrates scaling from 1 to 2 workers" do
+    # Procedures.new_order/1 and Procedures.payment/1 read-then-write
+    # d_next_o_id/customer balances across separate statements with no
+    # atomicity of their own (see EctoBenchTpcc.Tpcc.Procedures moduledoc)
+    # -- wrapping each call in Repo.transaction/2 here is what the
+    # moduledoc asks callers who want atomicity to do, and is required
+    # for worker_count: 2 to run without racing on the same o_id.
     procedures = [
-      %{name: "NewOrder", weight: 45, run: fn -> Procedures.new_order(Repo) end},
-      %{name: "Payment", weight: 43, run: fn -> Procedures.payment(Repo) end},
+      %{
+        name: "NewOrder",
+        weight: 45,
+        run: fn -> Repo.transaction(fn -> Procedures.new_order(Repo) end) end
+      },
+      %{
+        name: "Payment",
+        weight: 43,
+        run: fn -> Repo.transaction(fn -> Procedures.payment(Repo) end) end
+      },
       %{name: "OrderStatus", weight: 4, run: fn -> Procedures.order_status(Repo) end},
       %{name: "Delivery", weight: 4, run: fn -> Procedures.delivery(Repo) end},
       %{name: "StockLevel", weight: 4, run: fn -> Procedures.stock_level(Repo) end}

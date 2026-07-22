@@ -9,17 +9,13 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        elixir: ["1.20"]
-        otp: ["29"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: erlef/setup-beam@v1
         with:
-          elixir-version: ${{ matrix.elixir }}
-          otp-version: ${{ matrix.otp }}
+          elixir-version: "1.18"
+          otp-version: "27"
 
       - name: Restore deps cache
         uses: actions/cache@v4
@@ -27,7 +23,7 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-mix-1.18-27-${{ hashFiles('mix.lock') }}
 
       - run: mix deps.get
       - run: mix format --check-formatted
