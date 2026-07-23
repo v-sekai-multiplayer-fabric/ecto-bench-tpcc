@@ -9,17 +9,25 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        elixir: ["1.20"]
-        otp: ["29"]
+    timeout-minutes: 20
+    env:
+      FDB_VERSION: "7.1.26" # matches the fdb client fdb-record-layer 4.3.6.0 pins
+      FRS_VERSION: "4.3.6.0" # org.foundationdb:fdb-relational-server on Maven Central
+      FDB_CLUSTER_FILE: /etc/foundationdb/fdb.cluster
     steps:
       - uses: actions/checkout@v4
 
       - uses: erlef/setup-beam@v1
         with:
-          elixir-version: ${{ matrix.elixir }}
-          otp-version: ${{ matrix.otp }}
+          elixir-version: "1.20"
+          otp-version: "29"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: Restore deps cache
         uses: actions/cache@v4
@@ -27,10 +35,40 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-mix-1.20-29-${{ hashFiles('mix.lock') }}
+
+      - name: Restore Rust NIF build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            deps/ecto_fdb_relational/native/ecto_fdb_relational_nif/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('mix.lock') }}
+
+      - name: Install FoundationDB ${{ env.FDB_VERSION }} (single-node, auto-configured)
+        run: |
+          curl -fsSL -o /tmp/fdb-clients.deb \
+            "https://github.com/apple/foundationdb/releases/download/${FDB_VERSION}/foundationdb-clients_${FDB_VERSION}-1_amd64.deb"
+          curl -fsSL -o /tmp/fdb-server.deb \
+            "https://github.com/apple/foundationdb/releases/download/${FDB_VERSION}/foundationdb-server_${FDB_VERSION}-1_amd64.deb"
+          sudo dpkg -i /tmp/fdb-clients.deb /tmp/fdb-server.deb
+          # The server package auto-configures a single-node "test" database
+          # (see its postinst) -- just wait for it to come up.
+          for i in $(seq 1 30); do
+            fdbcli --exec 'status minimal' | grep -q 'The database is available' && break
+            sleep 2
+          done
+          fdbcli --exec status
+
+      - name: Download fdb-relational-server ${{ env.FRS_VERSION }} (embedded FRL classpath -- see ecto_fdb_relational's ADR 0003)
+        run: |
+          curl -fsSL -o /tmp/fdb-relational-server.jar \
+            "https://repo1.maven.org/maven2/org/foundationdb/fdb-relational-server/${FRS_VERSION}/fdb-relational-server-${FRS_VERSION}-all.jar"
+          echo "ECTO_FDB_RELATIONAL_CLASSPATH=/tmp/fdb-relational-server.jar" >> "$GITHUB_ENV"
 
       - run: mix deps.get
       - run: mix format --check-formatted
       - run: mix compile --warnings-as-errors
-      - name: Run the TPC-C workload against real SQLite (no external services needed)
+
+      - name: Run the TPC-C workload against real FoundationDB (FRL embedded in-process, no separate server)
         run: mix test --trace
