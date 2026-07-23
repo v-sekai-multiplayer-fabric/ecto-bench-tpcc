@@ -39,9 +39,13 @@ defmodule EctoBenchTpcc.MixProject do
       # repo was split out of that project specifically to prove the
       # harness/schema/workload are adapter-generic, so testing against
       # the adapter it was split from is the point. Not on Hex yet, so
-      # pulled straight from GitHub. Requires a live FoundationDB cluster
-      # + `fdb-relational-server` to actually run against -- see
-      # `test/tpcc_test.exs` and `.github/workflows/ci.yml`.
+      # pulled straight from GitHub (unpinned -- always the latest on
+      # `main`). As of v0.2 it embeds FRL in-process via a Rustler NIF +
+      # JNI (no separate `fdb-relational-server` process at runtime), so
+      # compiling this repo's :test env needs a JDK + Rust toolchain and
+      # `ECTO_FDB_RELATIONAL_CLASSPATH` set -- see `test/tpcc_test.exs`
+      # and `.github/workflows/ci.yml`. Still needs a live FoundationDB
+      # cluster to run against.
       {:ecto_fdb_relational, github: "weftspun/ecto-fdb-relational", only: :test},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]
