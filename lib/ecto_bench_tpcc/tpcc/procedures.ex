@@ -25,11 +25,22 @@ defmodule EctoBenchTpcc.Tpcc.Procedures do
   support -- a real behavior change from a true database-side aggregate
   (the count happens in the BEAM process, not the database), stated here
   rather than silently assumed equivalent.
+
+  **Customer/item selection uses TPC-C's NURand skewed-random
+  distribution** (`EctoBenchTpcc.Tpcc.NURand`, via the run-constants
+  `EctoBenchTpcc.Tpcc.Loader.load!/2` generates), not plain
+  `:rand.uniform/1` -- see that module's moduledoc. Warehouse/district
+  selection is still plain uniform random: the spec instead pins each of
+  its 10W terminals to one home warehouse/district for the whole run,
+  which this repo doesn't implement yet (see `Loader`'s moduledoc).
+  Always looks customers up by `C_ID`, never by `C_LAST` (the spec splits
+  Payment/OrderStatus 60/40 between the two) -- another stated, not
+  hidden, gap.
   """
 
   import Ecto.Query
 
-  alias EctoBenchTpcc.Tpcc.Loader
+  alias EctoBenchTpcc.Tpcc.{Config, Loader, NURand}
 
   alias EctoBenchTpcc.Tpcc.{
     Customer,
@@ -45,9 +56,10 @@ defmodule EctoBenchTpcc.Tpcc.Procedures do
 
   @doc "TPC-C NewOrder: place an order for a random basket of items."
   def new_order(repo) do
+    nurand = Config.nurand()
     w_id = random(1, Loader.warehouses())
     d_id = random(1, Loader.districts_per_warehouse())
-    c_id = random(1, Loader.customers_per_district())
+    c_id = NURand.customer_id(nurand, Loader.customers_per_district())
     ol_cnt = random(5, 10)
     now = System.system_time(:millisecond)
 
@@ -75,7 +87,7 @@ defmodule EctoBenchTpcc.Tpcc.Procedures do
     repo.insert!(%NewOrder{no_o_id: o_id, no_d_id: d_id, no_w_id: w_id})
 
     for ol_number <- 1..ol_cnt do
-      i_id = random(1, Loader.items())
+      i_id = NURand.item_id(nurand, Loader.items())
       item = repo.get!(Item, i_id)
       quantity = random(1, 10)
 
@@ -110,7 +122,7 @@ defmodule EctoBenchTpcc.Tpcc.Procedures do
   def payment(repo) do
     w_id = random(1, Loader.warehouses())
     d_id = random(1, Loader.districts_per_warehouse())
-    c_id = random(1, Loader.customers_per_district())
+    c_id = NURand.customer_id(Config.nurand(), Loader.customers_per_district())
     amount = random(1, 500) / 1 * 1.0
     now = NaiveDateTime.utc_now()
 
@@ -159,7 +171,7 @@ defmodule EctoBenchTpcc.Tpcc.Procedures do
   def order_status(repo) do
     w_id = random(1, Loader.warehouses())
     d_id = random(1, Loader.districts_per_warehouse())
-    c_id = random(1, Loader.customers_per_district())
+    c_id = NURand.customer_id(Config.nurand(), Loader.customers_per_district())
 
     _customer = repo.get_by!(Customer, c_id: c_id, c_d_id: d_id, c_w_id: w_id)
 

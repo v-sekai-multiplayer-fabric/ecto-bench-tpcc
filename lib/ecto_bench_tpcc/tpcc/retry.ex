@@ -38,19 +38,21 @@ defmodule EctoBenchTpcc.Tpcc.Retry do
   @base_backoff_ms 5
 
   @doc """
-  Runs `fun` inside `repo.transaction/2`, retrying up to #{@max_attempts}
-  times with jittered exponential backoff if it raises an error that
-  looks like a transaction conflict. Re-raises the original error,
-  unmodified, once retries are exhausted or the error doesn't look like a
-  conflict.
+  Runs `fun` inside `repo.transaction/2` (passing `opts` through, e.g.
+  `timeout:`), retrying up to #{@max_attempts} times with jittered
+  exponential backoff if it raises an error that looks like a transaction
+  conflict. Re-raises the original error, unmodified, once retries are
+  exhausted or the error doesn't look like a conflict.
   """
-  def transaction(repo, fun, attempt \\ 1) do
-    repo.transaction(fun)
+  def transaction(repo, fun, opts \\ []), do: do_transaction(repo, fun, opts, 1)
+
+  defp do_transaction(repo, fun, opts, attempt) do
+    repo.transaction(fun, opts)
   rescue
     e ->
       if attempt < @max_attempts and conflict?(e) do
         attempt |> backoff_ms() |> Process.sleep()
-        transaction(repo, fun, attempt + 1)
+        do_transaction(repo, fun, opts, attempt + 1)
       else
         reraise e, __STACKTRACE__
       end

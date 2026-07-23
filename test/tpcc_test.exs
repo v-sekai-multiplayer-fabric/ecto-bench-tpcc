@@ -33,14 +33,16 @@ defmodule EctoBenchTpcc.TpccTest do
   transaction, which is fine here since migrations never do.
 
   Real atomicity means real write-write conflicts under contention: this
-  test's seed dataset (`Loader`) is deliberately tiny (2 warehouses, 2
-  districts each), so at `worker_count: 2` two concurrent `Payment` calls
-  regularly collide on the same warehouse/district row and FDB raises
-  `"Transaction not committed due to conflict with another transaction"`.
-  TPC-C's own spec mandates resubmitting a rolled-back transaction with
-  the same inputs rather than treating it as a failure -- the standard OCC
-  client pattern `EctoBenchTpcc.Tpcc.Retry.transaction/2` implements below,
-  used here instead of calling `Repo.transaction/2` directly.
+  test's seed dataset (`Loader.load!/2`, the official TPC-C minimum --
+  see `rfd/0001-tpcc-scaling.md`) is large enough (~600,000 rows at
+  `warehouses: 1`) that `worker_count: 2` colliding on the exact same
+  warehouse/district/customer row is rare but still real -- FDB then
+  raises `"Transaction not committed due to conflict with another
+  transaction"`. TPC-C's own spec mandates resubmitting a rolled-back
+  transaction with the same inputs rather than treating it as a failure --
+  the standard OCC client pattern `EctoBenchTpcc.Tpcc.Retry.transaction/2`
+  implements below, used here instead of calling `Repo.transaction/2`
+  directly.
   """
   use ExUnit.Case, async: false
 
@@ -55,24 +57,36 @@ defmodule EctoBenchTpcc.TpccTest do
     # :database must be uppercase -- FRL case-folds unquoted DDL
     # identifiers but uses config fields literally, uncased (see
     # ecto_fdb_relational's README).
-    Application.put_env(:ecto_bench_tpcc, Repo,
-      cluster_file: System.get_env("FRL_TEST_CLUSTER_FILE", "/etc/foundationdb/fdb.cluster"),
-      database: System.get_env("FRL_TEST_DATABASE", "/FRL/ECTO_BENCH_TPCC_TEST"),
-      relational_schema: "PUBLIC",
-      pool_size: 2
-    )
+    cluster_file = System.get_env("FRL_TEST_CLUSTER_FILE", "/etc/foundationdb/fdb.cluster")
+    database = System.get_env("FRL_TEST_DATABASE", "/FRL/ECTO_BENCH_TPCC_TEST")
+    base_config = [cluster_file: cluster_file, database: database, relational_schema: "PUBLIC"]
 
+    # Migrate with a *small* pool -- Ecto.Migrator.with_repo/3 itself
+    # defaults to pool_size: 2 for exactly this reason (see
+    # Loader.migrate!/1's moduledoc): several connections all
+    # establishing at once makes this adapter's DDL bootstrap noticeably
+    # more likely to hit a transient FDB conflict, measured directly
+    # against a real cluster. Only the *load* phase below needs a big
+    # pool.
+    Application.put_env(:ecto_bench_tpcc, Repo, base_config ++ [pool_size: 2])
     {:ok, _pid} = Repo.start_link()
 
-    # `Repo.start_link/0` returns as soon as the pool supervisor is up,
-    # not once a connection has actually been established -- but
-    # `EctoFdbRelational.Ddl` needs `Protocol.connect/1` to have already
-    # run (it stashes the target database/schema in `:persistent_term`
-    # the moment a connection is made) before any migration DDL can run.
+    # Repo.start_link/0 returns as soon as the pool supervisor is up, not
+    # once a connection has actually been established -- but
+    # EctoFdbRelational.Ddl needs Protocol.connect/1 to have already run
+    # (it stashes the target database/schema in :persistent_term the
+    # moment a connection is made) before any migration DDL can run.
     # Forcing a checkout here blocks until a real connection exists.
     Repo.checkout(fn -> :ok end)
-
     Loader.migrate!(Repo)
+    Repo.stop()
+
+    # Now restart with a bigger pool for Loader.load!/2's concurrently
+    # batched inserts (see its moduledoc's "Timing" section --
+    # @load_concurrency 16) to actually run in parallel instead of
+    # queueing on a 2-connection pool.
+    Application.put_env(:ecto_bench_tpcc, Repo, base_config ++ [pool_size: 20])
+    {:ok, _pid} = Repo.start_link()
     Loader.load!(Repo)
 
     on_exit(fn ->
