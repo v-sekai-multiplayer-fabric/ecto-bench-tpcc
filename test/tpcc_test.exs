@@ -78,7 +78,18 @@ defmodule EctoBenchTpcc.TpccTest do
     # moment a connection is made) before any migration DDL can run.
     # Forcing a checkout here blocks until a real connection exists.
     Repo.checkout(fn -> :ok end)
-    Loader.migrate!(Repo)
+
+    # Retry.run/1, not Loader.migrate!/1 itself (see that function's own
+    # moduledoc for why a small migration pool is the *real* fix) --
+    # this is specifically a pragmatic safety net for this test's own
+    # long, unattended runs against FRL's DDL bootstrap, which still
+    # flakes on a rare transient FDB conflict even with pool_size: 2.
+    # Retrying the whole migration is safe: EctoBenchTpcc.Tpcc.Migration's
+    # change/0 re-issues its whole schema from scratch on every `create
+    # table` (see EctoFdbRelational.SchemaTemplate's moduledoc), so a
+    # failure partway through and a full retry from the top is
+    # idempotent, not just "probably fine".
+    Retry.run(fn -> Loader.migrate!(Repo) end)
     Repo.stop()
 
     # Now restart with a bigger pool for Loader.load!/2's concurrently

@@ -44,15 +44,26 @@ defmodule EctoBenchTpcc.Tpcc.Retry do
   conflict. Re-raises the original error, unmodified, once retries are
   exhausted or the error doesn't look like a conflict.
   """
-  def transaction(repo, fun, opts \\ []), do: do_transaction(repo, fun, opts, 1)
+  def transaction(repo, fun, opts \\ []), do: run(fn -> repo.transaction(fun, opts) end)
 
-  defp do_transaction(repo, fun, opts, attempt) do
-    repo.transaction(fun, opts)
+  @doc """
+  Runs an arbitrary zero-arity `fun` (not necessarily a `repo.transaction/2`
+  call -- e.g. a caller wrapping `Ecto.Migrator.up/4`, which runs its own
+  DDL statements outside any transaction the caller controls), with the
+  same retry-on-conflict behavior as `transaction/3`. Only safe to use
+  when re-running `fun` after a partial failure is itself idempotent --
+  that's a property of what `fun` does, not something this function can
+  verify.
+  """
+  def run(fun), do: do_run(fun, 1)
+
+  defp do_run(fun, attempt) do
+    fun.()
   rescue
     e ->
       if attempt < @max_attempts and conflict?(e) do
         attempt |> backoff_ms() |> Process.sleep()
-        do_transaction(repo, fun, opts, attempt + 1)
+        do_run(fun, attempt + 1)
       else
         reraise e, __STACKTRACE__
       end

@@ -59,12 +59,41 @@ defmodule EctoBenchTpcc.Tpcc.Loader do
   treat as ordinary, not a shortcut around what's being measured: it
   speeds up *loading* the fixed dataset, not the transactional workload
   itself, and every row still goes through its own real `Repo.insert!/1`
-  and FDB commit -- nothing is coalesced, cached, or skipped. Needs
-  `Repo`'s `:pool_size` to be at least `@load_concurrency` to actually
-  achieve that concurrency (a smaller pool just queues checkouts, which
-  works too, just slower). Sequential, this was measured at ~48
-  rows/sec against a real cluster -- multiple hours for a full `W = 1`
-  load; concurrent, low tens of minutes.
+  and FDB commit -- nothing is coalesced, cached, or skipped. Sequential,
+  this was measured at ~48 rows/sec against a real cluster (multiple
+  hours for a full `W = 1` load).
+
+  **`@load_concurrency` is deliberately modest and is not the way to get
+  more parallelism.** `ecto_fdb_relational` (v0.2+) embeds FRL via a
+  Rustler NIF that creates exactly one JVM per OS process
+  (`JNI_CreateJavaVM` can only be called once per process) -- every
+  `DBConnection` pool worker is a lightweight BEAM process, not an OS
+  process, so no matter how high `Repo`'s `:pool_size` or
+  `@load_concurrency` go, all connections in *this* node share one
+  embedded JVM / one `libfdb_c` / one FDB network thread. Pushing
+  `pool_size: 20` onto that single shared reactor is exactly what
+  crashed the embedded JVM with a SIGSEGV in `libfdb_c.so` here (measured
+  directly -- the crash log showed only one thread named
+  `"fdb-network-thread"` across all 20 pooled connections). Real
+  parallelism instead comes from `opts[:nodes]` below -- genuinely
+  separate OS processes, each with its own embedded JVM.
+
+  ## Distributing across nodes (`opts[:nodes]`)
+
+  `opts[:nodes]` is a list of `EctoBenchTpcc.Tpcc.Cluster.start_nodes/2`
+  peer pids -- each a real, separate BEAM node/OS process, so each gets
+  its own embedded JVM once `EctoFdbRelational.Native` loads there
+  (confirmed directly: a `:peer` node independently opened its own FDB
+  connection to the same cluster). Every insert batch (see
+  `insert_chunk!/2`) round-robins across `[:local | opts[:nodes]]`.
+
+  The caller (not `Loader`, matching this library's "no opinion on the
+  caller's `Repo` lifecycle" philosophy elsewhere) must first start a
+  `repo`-config-matching `Repo` on every node in `opts[:nodes]` --
+  e.g. `:peer.call(pid, Repo, :start_link, [repo_config])` -- since
+  `insert_chunk!/2` calls `repo.insert!/1` in whichever process it runs
+  in, local or remote, and that only resolves to a real connection pool
+  if one is already registered there under that name.
   """
 
   alias EctoBenchTpcc.Tpcc.Migration
@@ -91,7 +120,7 @@ defmodule EctoBenchTpcc.Tpcc.Loader do
   @new_orders_per_district 900
 
   @batch_size 100
-  @load_concurrency 16
+  @load_concurrency 4
 
   def warehouses, do: Config.warehouses()
   def districts_per_warehouse, do: @districts_per_warehouse
