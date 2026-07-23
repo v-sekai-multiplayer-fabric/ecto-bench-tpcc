@@ -54,10 +54,10 @@ Harness.run(procedures, worker_count: 4, duration_ms: 10_000)
 
 See `test/tpcc_test.exs` for a complete, running example against
 `ecto_fdb_relational` (this repo's own CI reference adapter). It needs a
-live FoundationDB cluster + `fdb-relational-server` to run against -- see
-that test's moduledoc and `.github/workflows/ci.yml` for how to stand one
-up, or point `FRL_TEST_HOST`/`FRL_TEST_PORT`/`FRL_TEST_DATABASE` at one
-you already have running.
+live FoundationDB cluster to run against -- see that test's moduledoc and
+`.github/workflows/ci.yml` for how to stand one up, or point
+`FRL_TEST_CLUSTER_FILE`/`FRL_TEST_DATABASE` at one you already have
+running.
 
 ## Status / honest gaps
 
