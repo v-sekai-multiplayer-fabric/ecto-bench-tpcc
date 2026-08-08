@@ -13,10 +13,9 @@ This started as `bench/` inside
 to exercise that adapter under a real mixed transaction workload. But an
 Ecto *adapter* is inherently database-specific, while a TPC-C-style
 stress test built purely on `Ecto.Query`/`Ecto.Migration` is not -- it
-works against any real `Ecto.Adapters.SQL` adapter (Postgres, MySQL,
-SQLite, `ecto_fdb_relational`, ...). Splitting it out keeps each repo's
-concern single: `ecto-fdb-relational` is the adapter, this is the
-benchmark.
+works against any real Ecto adapter (Postgres, MySQL, SQLite,
+`ecto_foundationdb`, ...). Splitting it out keeps each repo's concern
+single: the adapter is the adapter, this is the benchmark.
 
 ## Origin
 
@@ -53,11 +52,16 @@ Harness.run(procedures, worker_count: 4, duration_ms: 10_000)
 ```
 
 See `test/tpcc_test.exs` for a complete, running example against
-`ecto_fdb_relational` (this repo's own CI reference adapter). It needs a
-live FoundationDB cluster to run against -- see that test's moduledoc and
-`.github/workflows/ci.yml` for how to stand one up, or point
-`FRL_TEST_CLUSTER_FILE`/`FRL_TEST_DATABASE` at one you already have
-running.
+`ecto_foundationdb` (this repo's own CI reference adapter). It needs
+FoundationDB **7.3 or newer** installed, and starts its own single-node
+cluster via `EctoFoundationDB.Sandbox` -- see that test's moduledoc and
+`.github/workflows/ci.yml`, or point `FDB_TEST_CLUSTER_FILE` at a cluster
+you already run.
+
+`ecto_foundationdb` is pinned to a fork branch that adds composite primary
+key support, because the released version accepts a single primary key
+field only and TPC-C identifies its tables by compound natural attributes.
+See `rfd/0005-ecto-foundationdb-composite-keys.md` and `mix.exs`.
 
 ## Status / honest gaps
 
@@ -77,6 +81,12 @@ running.
 - `StockLevel`'s `COUNT` is computed client-side (`Enum.count/2` over a
   plain `Repo.all/1`), not as a database aggregate, so it works against
   adapters that don't support `GROUP BY`/aggregates yet.
+- Composite primary key fields are declared warehouse-first, matching
+  TPC-C's own key order (`ORDER-LINE` is
+  `(OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER)`). Against `ecto_foundationdb`
+  that order is load-bearing, because it decides which prefix range scans
+  are possible; reordering it silently breaks `stock_level/1` and
+  `delivery/1`. Other adapters do not care.
 
 ## License
 

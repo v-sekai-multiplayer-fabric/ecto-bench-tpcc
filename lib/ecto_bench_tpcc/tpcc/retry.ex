@@ -43,14 +43,22 @@ defmodule EctoBenchTpcc.Tpcc.Retry do
   looks like a transaction conflict. Re-raises the original error,
   unmodified, once retries are exhausted or the error doesn't look like a
   conflict.
+
+  `opts` is passed straight through to `repo.transaction/2`, for adapters
+  that require options there -- `ecto_foundationdb`, for one, raises
+  `"Tenant required"` unless given `prefix: tenant`.
   """
-  def transaction(repo, fun, attempt \\ 1) do
-    repo.transaction(fun)
+  def transaction(repo, fun, opts \\ []) do
+    do_transaction(repo, fun, opts, 1)
+  end
+
+  defp do_transaction(repo, fun, opts, attempt) do
+    repo.transaction(fun, opts)
   rescue
     e ->
       if attempt < @max_attempts and conflict?(e) do
         attempt |> backoff_ms() |> Process.sleep()
-        transaction(repo, fun, attempt + 1)
+        do_transaction(repo, fun, opts, attempt + 1)
       else
         reraise e, __STACKTRACE__
       end

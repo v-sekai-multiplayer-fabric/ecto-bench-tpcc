@@ -11,3 +11,6 @@ erl_crash.dump
 *.db
 *.db-shm
 *.db-wal
+probe/fly/.appname
+probe/fly/fly.toml
+.erlfdb_sandbox/

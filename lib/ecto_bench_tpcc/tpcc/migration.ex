@@ -61,8 +61,8 @@ defmodule EctoBenchTpcc.Tpcc.Migration do
     end
 
     create table(:district, primary_key: false) do
-      add(:d_id, :integer, primary_key: true)
       add(:d_w_id, :integer, primary_key: true)
+      add(:d_id, :integer, primary_key: true)
       add(:d_name, :string)
       add(:d_tax, :float)
       add(:d_ytd, :float)
@@ -70,9 +70,9 @@ defmodule EctoBenchTpcc.Tpcc.Migration do
     end
 
     create table(:customer, primary_key: false) do
-      add(:c_id, :integer, primary_key: true)
-      add(:c_d_id, :integer, primary_key: true)
       add(:c_w_id, :integer, primary_key: true)
+      add(:c_d_id, :integer, primary_key: true)
+      add(:c_id, :integer, primary_key: true)
       add(:c_first, :string)
       add(:c_last, :string)
       add(:c_credit, :string)
@@ -95,9 +95,9 @@ defmodule EctoBenchTpcc.Tpcc.Migration do
     end
 
     create table(:oorder, primary_key: false) do
-      add(:o_id, :integer, primary_key: true)
-      add(:o_d_id, :integer, primary_key: true)
       add(:o_w_id, :integer, primary_key: true)
+      add(:o_d_id, :integer, primary_key: true)
+      add(:o_id, :integer, primary_key: true)
       add(:o_c_id, :integer)
       add(:o_entry_d, :integer)
       add(:o_carrier_id, :integer)
@@ -106,15 +106,15 @@ defmodule EctoBenchTpcc.Tpcc.Migration do
     end
 
     create table(:new_order, primary_key: false) do
-      add(:no_o_id, :integer, primary_key: true)
-      add(:no_d_id, :integer, primary_key: true)
       add(:no_w_id, :integer, primary_key: true)
+      add(:no_d_id, :integer, primary_key: true)
+      add(:no_o_id, :integer, primary_key: true)
     end
 
     create table(:order_line, primary_key: false) do
-      add(:ol_o_id, :integer, primary_key: true)
-      add(:ol_d_id, :integer, primary_key: true)
       add(:ol_w_id, :integer, primary_key: true)
+      add(:ol_d_id, :integer, primary_key: true)
+      add(:ol_o_id, :integer, primary_key: true)
       add(:ol_number, :integer, primary_key: true)
       add(:ol_i_id, :integer)
       add(:ol_supply_w_id, :integer)
@@ -133,8 +133,8 @@ defmodule EctoBenchTpcc.Tpcc.Migration do
     end
 
     create table(:stock, primary_key: false) do
-      add(:s_i_id, :integer, primary_key: true)
       add(:s_w_id, :integer, primary_key: true)
+      add(:s_i_id, :integer, primary_key: true)
       add(:s_quantity, :integer)
       add(:s_dist_info, :string)
       add(:s_ytd, :float)
