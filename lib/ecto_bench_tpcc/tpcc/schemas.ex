@@ -14,10 +14,10 @@ defmodule EctoBenchTpcc.Tpcc.District do
   @moduledoc false
   use Ecto.Schema
 
-  @primary_key false
+  @primary_key {:id, :binary_id, autogenerate: true}
   schema "district" do
-    field(:d_id, :integer, primary_key: true)
-    field(:d_w_id, :integer, primary_key: true)
+    field(:d_id, :integer)
+    field(:d_w_id, :integer)
     field(:d_name, :string)
     field(:d_tax, :float)
     field(:d_ytd, :float)
@@ -29,11 +29,11 @@ defmodule EctoBenchTpcc.Tpcc.Customer do
   @moduledoc false
   use Ecto.Schema
 
-  @primary_key false
+  @primary_key {:id, :binary_id, autogenerate: true}
   schema "customer" do
-    field(:c_id, :integer, primary_key: true)
-    field(:c_d_id, :integer, primary_key: true)
-    field(:c_w_id, :integer, primary_key: true)
+    field(:c_id, :integer)
+    field(:c_d_id, :integer)
+    field(:c_w_id, :integer)
     field(:c_first, :string)
     field(:c_last, :string)
     field(:c_credit, :string)
@@ -65,11 +65,11 @@ defmodule EctoBenchTpcc.Tpcc.Oorder do
   @moduledoc false
   use Ecto.Schema
 
-  @primary_key false
+  @primary_key {:id, :binary_id, autogenerate: true}
   schema "oorder" do
-    field(:o_id, :integer, primary_key: true)
-    field(:o_d_id, :integer, primary_key: true)
-    field(:o_w_id, :integer, primary_key: true)
+    field(:o_id, :integer)
+    field(:o_d_id, :integer)
+    field(:o_w_id, :integer)
     field(:o_c_id, :integer)
     field(:o_entry_d, :integer)
     field(:o_carrier_id, :integer)
@@ -82,11 +82,11 @@ defmodule EctoBenchTpcc.Tpcc.NewOrder do
   @moduledoc false
   use Ecto.Schema
 
-  @primary_key false
+  @primary_key {:id, :binary_id, autogenerate: true}
   schema "new_order" do
-    field(:no_o_id, :integer, primary_key: true)
-    field(:no_d_id, :integer, primary_key: true)
-    field(:no_w_id, :integer, primary_key: true)
+    field(:no_o_id, :integer)
+    field(:no_d_id, :integer)
+    field(:no_w_id, :integer)
   end
 end
 
@@ -94,12 +94,12 @@ defmodule EctoBenchTpcc.Tpcc.OrderLine do
   @moduledoc false
   use Ecto.Schema
 
-  @primary_key false
+  @primary_key {:id, :binary_id, autogenerate: true}
   schema "order_line" do
-    field(:ol_o_id, :integer, primary_key: true)
-    field(:ol_d_id, :integer, primary_key: true)
-    field(:ol_w_id, :integer, primary_key: true)
-    field(:ol_number, :integer, primary_key: true)
+    field(:ol_o_id, :integer)
+    field(:ol_d_id, :integer)
+    field(:ol_w_id, :integer)
+    field(:ol_number, :integer)
     field(:ol_i_id, :integer)
     field(:ol_supply_w_id, :integer)
     field(:ol_delivery_d, :integer)
@@ -126,10 +126,10 @@ defmodule EctoBenchTpcc.Tpcc.Stock do
   @moduledoc false
   use Ecto.Schema
 
-  @primary_key false
+  @primary_key {:id, :binary_id, autogenerate: true}
   schema "stock" do
-    field(:s_i_id, :integer, primary_key: true)
-    field(:s_w_id, :integer, primary_key: true)
+    field(:s_i_id, :integer)
+    field(:s_w_id, :integer)
     field(:s_quantity, :integer)
     field(:s_dist_info, :string)
     field(:s_ytd, :float)

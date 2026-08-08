@@ -33,6 +33,12 @@ defmodule EctoBenchTpcc.MixProject do
       {:ecto_sql, "~> 3.11"},
       {:benchee, "~> 1.3"},
 
+      # ecto_foundationdb reaches FoundationDB through erlfdb. No JVM, no
+      # JDK, no separate server process. Requires FoundationDB 7.3 or
+      # newer: on a 7.1.26 client, erlfdb_transaction_get_mapped_range
+      # raises ArgumentError and every indexed query fails.
+      {:ecto_foundationdb, "~> 0.7", only: [:dev, :test], runtime: false},
+
       # Dev/test only: `ecto_fdb_relational` (an Ecto adapter for
       # FoundationDB Record Layer's Relational Layer) is the reference
       # adapter this repo's own CI exercises the harness against -- this
