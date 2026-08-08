@@ -16,8 +16,8 @@ defmodule EctoBenchTpcc.Tpcc.District do
 
   @primary_key false
   schema "district" do
-    field(:d_id, :integer, primary_key: true)
     field(:d_w_id, :integer, primary_key: true)
+    field(:d_id, :integer, primary_key: true)
     field(:d_name, :string)
     field(:d_tax, :float)
     field(:d_ytd, :float)
@@ -31,9 +31,9 @@ defmodule EctoBenchTpcc.Tpcc.Customer do
 
   @primary_key false
   schema "customer" do
-    field(:c_id, :integer, primary_key: true)
-    field(:c_d_id, :integer, primary_key: true)
     field(:c_w_id, :integer, primary_key: true)
+    field(:c_d_id, :integer, primary_key: true)
+    field(:c_id, :integer, primary_key: true)
     field(:c_first, :string)
     field(:c_last, :string)
     field(:c_credit, :string)
@@ -67,9 +67,9 @@ defmodule EctoBenchTpcc.Tpcc.Oorder do
 
   @primary_key false
   schema "oorder" do
-    field(:o_id, :integer, primary_key: true)
-    field(:o_d_id, :integer, primary_key: true)
     field(:o_w_id, :integer, primary_key: true)
+    field(:o_d_id, :integer, primary_key: true)
+    field(:o_id, :integer, primary_key: true)
     field(:o_c_id, :integer)
     field(:o_entry_d, :integer)
     field(:o_carrier_id, :integer)
@@ -84,9 +84,9 @@ defmodule EctoBenchTpcc.Tpcc.NewOrder do
 
   @primary_key false
   schema "new_order" do
-    field(:no_o_id, :integer, primary_key: true)
-    field(:no_d_id, :integer, primary_key: true)
     field(:no_w_id, :integer, primary_key: true)
+    field(:no_d_id, :integer, primary_key: true)
+    field(:no_o_id, :integer, primary_key: true)
   end
 end
 
@@ -96,9 +96,9 @@ defmodule EctoBenchTpcc.Tpcc.OrderLine do
 
   @primary_key false
   schema "order_line" do
-    field(:ol_o_id, :integer, primary_key: true)
-    field(:ol_d_id, :integer, primary_key: true)
     field(:ol_w_id, :integer, primary_key: true)
+    field(:ol_d_id, :integer, primary_key: true)
+    field(:ol_o_id, :integer, primary_key: true)
     field(:ol_number, :integer, primary_key: true)
     field(:ol_i_id, :integer)
     field(:ol_supply_w_id, :integer)
@@ -128,8 +128,8 @@ defmodule EctoBenchTpcc.Tpcc.Stock do
 
   @primary_key false
   schema "stock" do
-    field(:s_i_id, :integer, primary_key: true)
     field(:s_w_id, :integer, primary_key: true)
+    field(:s_i_id, :integer, primary_key: true)
     field(:s_quantity, :integer)
     field(:s_dist_info, :string)
     field(:s_ytd, :float)

@@ -13,3 +13,4 @@ erl_crash.dump
 *.db-wal
 probe/fly/.appname
 probe/fly/fly.toml
+.erlfdb_sandbox/

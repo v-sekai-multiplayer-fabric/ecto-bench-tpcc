@@ -37,7 +37,22 @@ defmodule EctoBenchTpcc.MixProject do
       # JDK, no separate server process. Requires FoundationDB 7.3 or
       # newer: on a 7.1.26 client, erlfdb_transaction_get_mapped_range
       # raises ArgumentError and every indexed query fails.
-      {:ecto_foundationdb, "~> 0.7", only: [:dev, :test], runtime: false},
+      #
+      # Pinned to a fork branch, not Hex, because released
+      # `ecto_foundationdb` (0.7.6) supports a single primary key field
+      # only -- `Fields.get_pk_field!/1` matches `[pk_field]` and raises
+      # `MatchError` on a composite key. TPC-C identifies its tables by
+      # compound natural attributes, so on Hex the only option is a
+      # synthetic key plus covering indexes, which changes the physical
+      # layout and with it the contention being measured. The branch adds
+      # composite primary key support, keeping single-key encoding
+      # byte-identical. Move back to Hex once it lands upstream at
+      # foundationdb-beam/ecto_foundationdb.
+      {:ecto_foundationdb,
+       github: "v-sekai-multiplayer-fabric/ecto_foundationdb",
+       branch: "feat/composite-primary-keys",
+       only: [:dev, :test],
+       runtime: false},
 
       # Dev/test only: `ecto_fdb_relational` (an Ecto adapter for
       # FoundationDB Record Layer's Relational Layer) is the reference
