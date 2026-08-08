@@ -5,26 +5,6 @@ adapter -- schema (as a portable `Ecto.Migration`), workload
 (`Ecto.Query`/`Repo` calls), and load runner are all adapter-agnostic.
 Bring your own `Repo`.
 
-## Why this is a separate repo
-
-This started as `bench/` inside
-[`ecto-fdb-relational`](https://github.com/weftspun/ecto-fdb-relational)
-(an Ecto adapter for FoundationDB Record Layer's Relational Layer), built
-to exercise that adapter under a real mixed transaction workload. But an
-Ecto *adapter* is inherently database-specific, while a TPC-C-style
-stress test built purely on `Ecto.Query`/`Ecto.Migration` is not -- it
-works against any real Ecto adapter (Postgres, MySQL, SQLite,
-`ecto_foundationdb`, ...). Splitting it out keeps each repo's concern
-single: the adapter is the adapter, this is the benchmark.
-
-## Origin
-
-Ported from [`weftspun/scenario-tpcc-bench`](https://github.com/weftspun/scenario-tpcc-bench)'s
-Java/BenchBase-based `tpcc` scenario (PR #12) -- see [`rfd/`](rfd/) for
-the exact scaling formulas transcribed from that project's loader source,
-covering all four of its scenarios (tpcc, zonefabric, assetcdn, cassie),
-not just the one implemented here so far.
-
 ## Usage
 
 ```elixir
@@ -51,18 +31,6 @@ procedures = [
 Harness.run(procedures, worker_count: 4, duration_ms: 10_000)
 ```
 
-See `test/tpcc_test.exs` for a complete, running example against
-`ecto_foundationdb` (this repo's own CI reference adapter). It needs
-FoundationDB **7.3 or newer** installed, and starts its own single-node
-cluster via `EctoFoundationDB.Sandbox` -- see that test's moduledoc and
-`.github/workflows/ci.yml`, or point `FDB_TEST_CLUSTER_FILE` at a cluster
-you already run.
-
-`ecto_foundationdb` is pinned to a fork branch that adds composite primary
-key support, because the released version accepts a single primary key
-field only and TPC-C identifies its tables by compound natural attributes.
-See `rfd/0005-ecto-foundationdb-composite-keys.md` and `mix.exs`.
-
 ## Status / honest gaps
 
 - **Not yet scale-factor-accurate** (see `rfd/0001-tpcc-scaling.md`):
@@ -70,10 +38,6 @@ See `rfd/0005-ecto-foundationdb-composite-keys.md` and `mix.exs`.
   proportional-to-warehouse-count generation or its mandated NURand
   skewed-random distribution. Matching that faithfully is the eventual
   point of this project, not yet done.
-- Only the standard `tpcc` scenario is implemented so far. `rfd/0002`-`0004`
-  document the scaling specs for zonefabric/assetcdn/cassie, ported from
-  the same upstream repo, as a specification for future scenarios --
-  not yet implemented here.
 - No cross-statement transaction atomicity is assumed or provided by this
   library -- see `EctoBenchTpcc.Tpcc.Procedures`'s moduledoc. Wrap calls
   in `Repo.transaction/2` yourself if your adapter supports real
@@ -81,13 +45,3 @@ See `rfd/0005-ecto-foundationdb-composite-keys.md` and `mix.exs`.
 - `StockLevel`'s `COUNT` is computed client-side (`Enum.count/2` over a
   plain `Repo.all/1`), not as a database aggregate, so it works against
   adapters that don't support `GROUP BY`/aggregates yet.
-- Composite primary key fields are declared warehouse-first, matching
-  TPC-C's own key order (`ORDER-LINE` is
-  `(OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER)`). Against `ecto_foundationdb`
-  that order is load-bearing, because it decides which prefix range scans
-  are possible; reordering it silently breaks `stock_level/1` and
-  `delivery/1`. Other adapters do not care.
-
-## License
-
-Apache-2.0
