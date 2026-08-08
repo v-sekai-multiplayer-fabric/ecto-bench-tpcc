@@ -1,9 +1,6 @@
 # EctoBenchTpcc
 
-A generic TPC-C-style benchmark harness for **any** [`Ecto`](https://hexdocs.pm/ecto)
-adapter -- schema (as a portable `Ecto.Migration`), workload
-(`Ecto.Query`/`Repo` calls), and load runner are all adapter-agnostic.
-Bring your own `Repo`.
+A generic TPC-C-style benchmark harness for any Ecto adapter.
 
 ## Usage
 
@@ -33,7 +30,7 @@ Harness.run(procedures, worker_count: 4, duration_ms: 10_000)
 
 ## Status / honest gaps
 
-- **Not yet scale-factor-accurate** (see `rfd/0001-tpcc-scaling.md`):
+- Not yet scale-factor-accurate:
   `Loader.load!/1` seeds a small, fixed dataset, not BenchBase's real
   proportional-to-warehouse-count generation or its mandated NURand
   skewed-random distribution. Matching that faithfully is the eventual
