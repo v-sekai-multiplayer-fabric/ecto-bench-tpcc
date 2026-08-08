@@ -19,7 +19,7 @@ defmodule EctoBenchTpcc.Tpcc.RetryTest do
 
   defmodule FakeRepo do
     @moduledoc false
-    def transaction(fun), do: fun.()
+    def transaction(fun, _opts \\ []), do: fun.()
   end
 
   setup do
