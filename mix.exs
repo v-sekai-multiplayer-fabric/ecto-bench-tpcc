@@ -47,12 +47,12 @@ defmodule EctoBenchTpcc.MixProject do
       # synthetic key plus covering indexes, which changes the physical
       # layout and with it the contention being measured. The branch adds
       # composite primary key support, keeping single-key encoding
-      # byte-identical. Move back to Hex once it lands upstream at
-      # foundationdb-beam/ecto_foundationdb.
+      # byte-identical. Tracks the `vsk` branch rather than the feature
+      # branch, so anything else V-Sekai lands arrives here too. Move back
+      # to Hex once it lands upstream at foundationdb-beam/ecto_foundationdb
+      # (PR 104).
       {:ecto_foundationdb,
-       github: "v-sekai-multiplayer-fabric/ecto_foundationdb",
-       branch: "feat/composite-primary-keys",
-       only: [:dev, :test]},
+       github: "v-sekai-multiplayer-fabric/ecto_foundationdb", branch: "vsk", only: [:dev, :test]},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]
   end
